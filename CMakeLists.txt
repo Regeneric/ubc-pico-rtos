@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.12)
 
 set(PICO_SDK_PATH /usr/share/pico-sdk)
-set(PICO_EXTRAS_PATH /usr/share/pico-extras)
+set(PICO_EXTRAS_PATH /home/hkk/Documents/c/pico/pico-extras)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
