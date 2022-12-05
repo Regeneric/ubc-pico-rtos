@@ -20,5 +20,10 @@ project(Pico-RTOS)
 
 pico_sdk_init()
 
+add_compile_definitions(
+    FREE_RTOS_KERNEL_SMP=0
+    portSUPPORT_SMP=0
+)
+
 add_subdirectory(src)
 add_subdirectory(rtos)

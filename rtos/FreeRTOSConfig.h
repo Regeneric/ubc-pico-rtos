@@ -1,6 +1,13 @@
 #ifndef FREERTOS_CONFIG_H
 #define FREERTOS_CONFIG_H
 
+#if FREE_RTOS_KERNEL_SMP
+    #define configNUM_CORES                 2
+    #define configTICK_CORE                 0
+    #define configRUN_MULTIPLE_PRIORITIES   1
+    #define configUSE_CORE_AFFINITY         1
+#endif
+
 /* Use Pico SDK ISR handlers */
 #define vPortSVCHandler         isr_svcall
 #define xPortPendSVHandler      isr_pendsv

@@ -3,11 +3,17 @@ add_executable(rtos
 )
 
 target_link_libraries(rtos 
-    pico_stdlib 
-    pico_cyw43_arch_none 
     freertos
-    # lwipallapps 
-    # lwipcore
+    pico_stdlib 
+    pico_multicore
+    # pico_cyw43_arch_none 
+    # pico_lwipallapps 
+    # pico_lwipcore
+)
+
+target_compile_definitions(rtos PRIVATE
+    FREE_RTOS_KERNEL_SMP=0
+    portSUPPORT_SMP=0
 )
 
 pico_enable_stdio_usb(rtos 1)
