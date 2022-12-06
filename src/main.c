@@ -60,28 +60,34 @@ static SemaphoreHandle_t g_injDataMutex = NULL;
 
 void initDataStructs();
 void initIRQ(uint vssGPIO, uint injGPIO);
-void ISR();
+void _ISR();
 
+
+#ifndef SYS_TIMER_PERIOD_MS
+#define SYS_TIMER_PERIOD_MS 1000
+#endif
 
 void initTimer();
-void sysTimerISR();
+void _sysTimerISR();
 
-void sysTimerTask(void *params);
+void _sysTimerTask(void *params);
 TaskHandle_t g_sysTimerTaskHandle = NULL;
 TimerHandle_t g_sysTimer = NULL;
 
 
-void vssTask(void *params);
+void _vssTask(void *params);
 static TaskHandle_t g_vssTaskHandle = NULL;
 
-void injTask(void *params);
+void _injTask(void *params);
 static TaskHandle_t g_injTaskHandle = NULL;
 // _VSS and INJ_
 
 
-void displayTask(void *params);
+void _displayTask(void *params);
 TaskHandle_t g_displayTaskHandle = NULL;
 
+
+uint g_coldStart = 1;
 
 int main() {
     stdio_init_all();
@@ -97,21 +103,21 @@ int main() {
     g_injDataMutex = xSemaphoreCreateMutex();
 
 
-    xTaskCreate(sysTimerTask, "System Timer",
+    xTaskCreate(_sysTimerTask, "System Timer",
         256, NULL, 3, &g_sysTimerTaskHandle
     );
 
 
-    xTaskCreate(vssTask, "Vehicle Speed Sensor readings",
+    xTaskCreate(_vssTask, "Vehicle Speed Sensor readings",
         256, NULL, 2, &g_vssTaskHandle
     );
 
-    xTaskCreate(injTask, "Injector signal readings",
+    xTaskCreate(_injTask, "Injector signal readings",
         256, NULL, 2, &g_injTaskHandle
     );
     
     
-    xTaskCreate(displayTask, "Display data from sensors",
+    xTaskCreate(_displayTask, "Display data from sensors",
         256, NULL, 1, &g_displayTaskHandle
     );
 
@@ -134,16 +140,16 @@ void initIRQ(uint vssGPIO, uint injGPIO) {
     gpio_pull_up(vssGPIO); 
     gpio_pull_up(injGPIO);
 
-    // Both IRQs use the same ISR
-    gpio_set_irq_enabled_with_callback(vssGPIO, GPIO_IRQ_EDGE_FALL, 1, ISR);
+    // Both IRQs use the same _ISR
+    gpio_set_irq_enabled_with_callback(vssGPIO, GPIO_IRQ_EDGE_FALL, 1, _ISR);
     gpio_set_irq_enabled(injGPIO, GPIO_IRQ_EDGE_FALL | GPIO_IRQ_EDGE_RISE, 1);
 
     return;
 }
-void ISR(uint gpio) {
+void _ISR(uint gpio) {
     BaseType_t checkYield;
 
-    // Logic inside ISR decides, which task should be resumed
+    // Logic inside _ISR decides, which task should be resumed
     if(gpio == VSS_PIN) checkYield = xTaskResumeFromISR(g_vssTaskHandle);
     if(gpio == INJ_PIN) checkYield = xTaskResumeFromISR(g_injTaskHandle);
 
@@ -153,12 +159,12 @@ void ISR(uint gpio) {
 
 
 void initTimer() {
-    g_sysTimer = xTimerCreate("SYS TIMER", pdMS_TO_TICKS(250), pdTRUE, 0, sysTimerISR);
+    g_sysTimer = xTimerCreate("SYS TIMER", pdMS_TO_TICKS(SYS_TIMER_PERIOD_MS), pdTRUE, 0, _sysTimerISR);
     if(g_sysTimer == NULL) while(1);
 
     return;
 }
-void sysTimerISR() {
+void _sysTimerISR() {
     BaseType_t checkYield;
     checkYield = xTaskResumeFromISR(g_sysTimerTaskHandle);
     portYIELD_FROM_ISR(checkYield);
@@ -166,7 +172,7 @@ void sysTimerISR() {
     return;
 }
 
-void sysTimerTask(void *params) {
+void _sysTimerTask(void *params) {
     while(1) {
         vTaskSuspend(NULL);
 
@@ -187,7 +193,7 @@ void sysTimerTask(void *params) {
 }
 
 
-void vssTask(void *params) {
+void _vssTask(void *params) {
     while(1) {
         vTaskSuspend(NULL);     // NULL suspends itself
         if(xSemaphoreTake(g_vssDataMutex, 0) == pdTRUE) {
@@ -199,11 +205,11 @@ void vssTask(void *params) {
             g_vss.currentSpeed = cs;
             
             // Average vehicle speed
-            if(g_vss.currentSpeed > 5) {
+            if(cs > 5) {
                 g_vss.avgSpeedDivider++;
                 
                 // Harmonic mean
-                g_vss.sumInv   = g_vss.sumInv + (1.0f/(float)g_vss.currentSpeed);
+                g_vss.sumInv += + (1.0f/(float)cs);
                 g_vss.avgSpeed = g_vss.avgSpeedDivider/g_vss.sumInv;
             } xSemaphoreGive(g_vssDataMutex);
         }
@@ -211,7 +217,7 @@ void vssTask(void *params) {
 }
 
 
-void injTask(void *params) {
+void _injTask(void *params) {
     while(1) {
         vTaskSuspend(NULL);     // NULL suspends itself
         if(xSemaphoreTake(g_injDataMutex, 0) == pdTRUE) {
@@ -231,11 +237,12 @@ void injTask(void *params) {
                     
             if(xSemaphoreTake(g_vssDataMutex, 0) == pdTRUE) {
                 if(g_vss.currentSpeed > 5) {
-                    g_inj.insConsumption = (100*iotv)/(float)g_vss.currentSpeed;
+                    float ic = (100*iotv)/(float)g_vss.currentSpeed;
+                    g_inj.insConsumption = ic;
 
                     // Harmonic mean
-                    if(g_inj.insConsumption > 0) {
-                        g_inj.sumInv += (1.0f/g_inj.insConsumption);
+                    if(ic > 0 && ic < 100) {
+                        g_inj.sumInv += (1.0f/ic);
                         g_inj.avgConsumption = g_vss.avgSpeedDivider/g_inj.sumInv;
                     }
                 } else g_inj.insConsumption = iotv;
@@ -246,11 +253,16 @@ void injTask(void *params) {
 }
 
 
-void displayTask(void *params) {
+void _displayTask(void *params) {
     VssData vd; InjData id;
 
     while(1) {
         vTaskSuspend(NULL);
+        if(g_coldStart) {
+            printf("\e[1;1H\e[2J");     // Clear screen at boot
+            g_coldStart = 0;
+        }
+
         if(uxQueueMessagesWaiting(g_vssDataQu) > 0) {
             xQueueReceive(g_vssDataQu, &vd, portMAX_DELAY);
 
