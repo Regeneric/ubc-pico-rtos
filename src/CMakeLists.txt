@@ -4,8 +4,17 @@ add_executable(rtos
 
 target_link_libraries(rtos 
     freertos
+    
     pico_stdlib 
     pico_multicore
+    pico_binary_info
+
+    hardware_gpio
+    hardware_irq
+    hardware_sync
+    hardware_flash
+    hardware_i2c
+
     # pico_cyw43_arch_none 
     # pico_lwipallapps 
     # pico_lwipcore
